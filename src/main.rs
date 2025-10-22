@@ -511,13 +511,10 @@ impl TimeWarpApp {
 
     fn execute_tw_pascal(&mut self, code: &str) -> String {
         let mut output = Vec::new();
-        let lines: Vec<&str> = code.lines().collect();
 
-        let mut i = 0;
-        while i < lines.len() {
-            let line = lines[i].trim();
+        for line in code.lines() {
+            let line = line.trim();
             if line.is_empty() || line.to_lowercase().starts_with("(*") || line.starts_with("{") {
-                i += 1;
                 continue;
             }
 
@@ -652,8 +649,6 @@ impl TimeWarpApp {
             else if !line.is_empty() && !line.ends_with(';') && !line.ends_with('.') {
                 output.push(format!("Pascal statement: {}", line));
             }
-
-            i += 1; // Move to next line
         }
 
         output.join("\n")
@@ -662,13 +657,10 @@ impl TimeWarpApp {
     fn execute_tw_prolog(&mut self, code: &str) -> String {
         let mut output = Vec::new();
         let mut predicates = std::collections::HashMap::new();
-        let lines: Vec<&str> = code.lines().collect();
 
-        let mut i = 0;
-        while i < lines.len() {
-            let line = lines[i].trim();
+        for line in code.lines() {
+            let line = line.trim();
             if line.is_empty() || line.starts_with('%') || line.starts_with("/*") {
-                i += 1;
                 continue;
             }
 
@@ -789,8 +781,6 @@ impl TimeWarpApp {
             else if !line.is_empty() && !line.ends_with('.') {
                 output.push(format!("Prolog statement: {}", line));
             }
-
-            i += 1; // Move to next line
         }
 
         output.join("\n")
@@ -1378,24 +1368,116 @@ impl eframe::App for TimeWarpApp {
                             ui.text_edit_multiline(&mut self.code);
                         }
                     }
-                    1 => { // Output Tab
-                        ui.heading("Output Console");
+                    1 => { // Output Tab - Interactive Canvas
+                        ui.heading("Interactive Output Console");
                         ui.add_space(4.0);
-                        egui::ScrollArea::vertical().show(ui, |ui| {
-                            ui.label(&self.output);
-                        });
 
-                        // Input field when waiting for user input
+                        // Create a canvas for interactive output
+                        let canvas_size = egui::Vec2::new(ui.available_width(), 400.0);
+                        let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click_and_drag());
+
+                        let rect = response.rect;
+
+                        // Draw background
+                        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 30));
+
+                        // Draw border
+                        painter.rect_stroke(rect, 4.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 100, 120)));
+
+                        // Handle canvas interactions
+                        let mut clicked_pos = None;
+                        if response.clicked() {
+                            if let Some(pos) = response.interact_pointer_pos() {
+                                clicked_pos = Some(pos);
+                            }
+                        }
+
+                        // Prepare text layout
+                        let font_id = egui::FontId::monospace(14.0);
+                        let text_color = egui::Color32::from_rgb(200, 200, 220);
+
+                        // Split output into lines and handle scrolling
+                        let lines: Vec<&str> = self.output.lines().collect();
+                        let line_height = 18.0;
+                        let max_visible_lines = ((rect.height() - 20.0) / line_height) as usize;
+                        let total_lines = lines.len();
+
+                        // Calculate scroll position
+                        let mut scroll_offset = 0;
+                        if total_lines > max_visible_lines {
+                            scroll_offset = total_lines.saturating_sub(max_visible_lines);
+                        }
+
+                        // Draw visible lines
+                        let mut y_pos = rect.min.y + 10.0;
+                        for (i, line) in lines.iter().enumerate() {
+                            if i >= scroll_offset && i < scroll_offset + max_visible_lines {
+                                let text_pos = egui::Pos2::new(rect.min.x + 10.0, y_pos);
+                                painter.text(text_pos, egui::Align2::LEFT_TOP, *line, font_id.clone(), text_color);
+                                y_pos += line_height;
+                            }
+                        }
+
+                        // Handle input mode
                         if self.waiting_for_input {
-                            ui.separator();
-                            ui.label("DEBUG: waiting_for_input is true"); // Debug message
-                            ui.label(&self.input_prompt);
-                            ui.horizontal(|ui| {
-                                let response = ui.text_edit_singleline(&mut self.user_input);
-                                if ui.button("Submit").clicked() || (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
-                                    self.process_user_input();
+                            // Draw input prompt and cursor
+                            let prompt_text = format!("{} {}", self.input_prompt, self.user_input);
+                            let prompt_pos = egui::Pos2::new(rect.min.x + 10.0, rect.max.y - 30.0);
+                            painter.text(prompt_pos, egui::Align2::LEFT_TOP, &prompt_text, font_id.clone(), egui::Color32::YELLOW);
+
+                            // Draw cursor
+                            let cursor_x = rect.min.x + 10.0 + painter.layout(prompt_text, font_id.clone(), text_color, f32::INFINITY).size.x;
+                            let cursor_y = rect.max.y - 30.0;
+                            painter.line_segment(
+                                [egui::Pos2::new(cursor_x, cursor_y), egui::Pos2::new(cursor_x, cursor_y + 14.0)],
+                                egui::Stroke::new(2.0, egui::Color32::WHITE),
+                            );
+
+                            // Handle keyboard input
+                            ui.input(|i| {
+                                for event in &i.events {
+                                    match event {
+                                        egui::Event::Text(text) => {
+                                            self.user_input.push_str(text);
+                                        }
+                                        egui::Event::Key { key, pressed: true, modifiers: _ } => {
+                                            match key {
+                                                egui::Key::Enter => {
+                                                    self.process_user_input();
+                                                }
+                                                egui::Key::Backspace => {
+                                                    self.user_input.pop();
+                                                }
+                                                egui::Key::Escape => {
+                                                    self.waiting_for_input = false;
+                                                    self.input_prompt.clear();
+                                                    self.user_input.clear();
+                                                    self.current_input_var.clear();
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        _ => {}
+                                    }
                                 }
                             });
+
+                            // Instructions
+                            let instr_pos = egui::Pos2::new(rect.min.x + 10.0, rect.max.y - 50.0);
+                            painter.text(instr_pos, egui::Align2::LEFT_TOP, "Type your input and press Enter, or Esc to cancel", egui::FontId::default(), egui::Color32::GRAY);
+                        } else {
+                            // Show ready message
+                            let ready_pos = egui::Pos2::new(rect.min.x + 10.0, rect.max.y - 30.0);
+                            painter.text(ready_pos, egui::Align2::LEFT_TOP, "Ready for program execution...", egui::FontId::default(), egui::Color32::GRAY);
+                        }
+
+                        // Handle scrolling with mouse wheel
+                        if let Some(scroll) = ui.input(|i| i.scroll_delta.y) {
+                            if scroll > 0.0 && scroll_offset > 0 {
+                                // Scroll up
+                            } else if scroll < 0.0 && scroll_offset < total_lines.saturating_sub(max_visible_lines) {
+                                // Scroll down
+                            }
                         }
                     }
                     2 => { // Turtle Graphics Tab
