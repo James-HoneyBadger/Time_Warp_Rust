@@ -15,7 +15,7 @@ struct TimeWarpApp {
     code: String,
     output: String,
     language: String,
-    active_tab: usize, // 0 = Editor, 1 = Output, 2 = Turtle
+    active_tab: usize, // 0 = Editor, 1 = Output & Turtle
     code_history: Vec<String>,
     code_history_index: usize,
     last_file_path: Option<String>,
@@ -31,6 +31,7 @@ struct TimeWarpApp {
     input_prompt: String,
     user_input: String,
     current_input_var: String,
+    output_scroll: usize,
 }
 
 impl Default for TimeWarpApp {
@@ -61,6 +62,7 @@ impl Default for TimeWarpApp {
             input_prompt: String::new(),
             user_input: String::new(),
             current_input_var: String::new(),
+            output_scroll: 0,
         }
     }
 }
@@ -77,7 +79,7 @@ impl TimeWarpApp {
         };
         if self.is_executing && !self.waiting_for_input {  // Only show result if not stopped and not waiting for input
             self.output = format!("[Output for {}]\n{}", self.language, result);
-            // Note: No longer auto-switching to output tab since tabs are always visible
+            self.active_tab = 1; // Switch to Output tab when execution completes
         }
         self.is_executing = false;
     }
@@ -126,19 +128,25 @@ impl TimeWarpApp {
 
             // GW BASIC Commands
             if cmd_upper.starts_with("PRINT") || cmd_upper.starts_with("?") {
-                let print_cmd = if cmd_upper.starts_with("?") { &command[1..] } else { &command[6..] };
+                let print_cmd = if cmd_upper.starts_with("?") { 
+                    if command.len() > 1 { &command[1..] } else { "" }
+                } else { 
+                    if command.len() > 6 { &command[6..] } else { "" }
+                };
                 self.execute_print(&mut output, print_cmd.trim());
             }
             else if cmd_upper.starts_with("LET ") {
-                self.execute_let(&mut output, &command[4..]);
+                let args = if command.len() > 4 { &command[4..] } else { "" };
+                self.execute_let(&mut output, args);
             }
             else if cmd_upper.starts_with("INPUT") {
-                self.execute_input(&mut output, &command[6..]);
+                let args = if command.len() > 6 { &command[6..] } else { "" };
+                self.execute_input(&mut output, args);
             }
             else if cmd_upper.starts_with("IF ") {
                 if let Some(then_pos) = cmd_upper.find(" THEN ") {
-                    let condition = &command[3..then_pos];
-                    let then_part = &command[then_pos + 6..];
+                    let condition = if command.len() > 3 && then_pos > 3 { &command[3..then_pos] } else { "" };
+                    let then_part = if command.len() > then_pos + 6 { &command[then_pos + 6..] } else { "" };
                     if self.evaluate_condition(condition) {
                         if let Ok(line_num) = then_part.trim().parse::<u32>() {
                             // GOTO line number
@@ -177,7 +185,8 @@ impl TimeWarpApp {
                 }
             }
             else if cmd_upper.starts_with("FOR ") {
-                self.execute_for(&mut output, &command[4..], &mut for_stack);
+                let args = if command.len() > 4 { &command[4..] } else { "" };
+                self.execute_for(&mut output, args, &mut for_stack);
             }
             else if cmd_upper == "NEXT" {
                 if self.execute_next(&mut output, &mut for_stack) {
@@ -187,7 +196,7 @@ impl TimeWarpApp {
             }
             else if cmd_upper.starts_with("WHILE ") {
                 // Simple WHILE implementation
-                let condition = &command[6..];
+                let condition = if command.len() > 6 { &command[6..] } else { "" };
                 if !self.evaluate_condition(condition) {
                     // Skip to WEND
                     let mut nest_level = 1;
@@ -218,7 +227,7 @@ impl TimeWarpApp {
                 if while_i < i {
                     let (_, while_cmd) = &lines[while_i];
                     if while_cmd.to_uppercase().starts_with("WHILE ") {
-                        let condition = &while_cmd[6..];
+                        let condition = if while_cmd.len() > 6 { &while_cmd[6..] } else { "" };
                         if self.evaluate_condition(condition) {
                             i = while_i;
                             continue;
@@ -231,7 +240,7 @@ impl TimeWarpApp {
                 output.push("Screen cleared.".to_string());
             }
             else if cmd_upper.starts_with("COLOR ") {
-                let color_part = &command[6..];
+                let color_part = if command.len() > 6 { &command[6..] } else { "" };
                 if let Ok(color) = color_part.trim().parse::<u8>() {
                     output.push(format!("Color set to {}", color));
                 }
@@ -240,22 +249,23 @@ impl TimeWarpApp {
                 output.push("BEEP!".to_string());
             }
             else if cmd_upper.starts_with("SOUND ") {
-                output.push(format!("Sound: {}", &command[6..]));
+                let sound_part = if command.len() > 6 { &command[6..] } else { "" };
+                output.push(format!("Sound: {}", sound_part));
             }
 
             // PILOT Commands
             else if cmd_trim.starts_with("T:") {
-                let text = &cmd_trim[2..].trim();
+                let text = if cmd_trim.len() > 2 { &cmd_trim[2..].trim() } else { "" };
                 output.push(format!("QUESTION: {}", text));
             }
             else if cmd_trim.starts_with("A:") {
-                let text = &cmd_trim[2..].trim();
-                output.push(format!("ACCEPT: {}", text));
-                // In a real implementation, this would wait for user input
-                output.push("(Waiting for user input...)".to_string());
+                // PILOT ACCEPT command - set up interactive input like INPUT
+                let prompt_text = if cmd_trim.len() > 2 { &cmd_trim[2..].trim() } else { "" };
+                let args = if prompt_text.is_empty() { "" } else { prompt_text };
+                self.execute_input(&mut output, args);
             }
             else if cmd_trim.starts_with("J:") {
-                let jump_target = &cmd_trim[2..].trim();
+                let jump_target = if cmd_trim.len() > 2 { &cmd_trim[2..].trim() } else { "" };
                 if let Ok(line_num) = jump_target.parse::<u32>() {
                     if let Some(&new_i) = line_numbers.get(&line_num) {
                         i = new_i;
@@ -264,28 +274,28 @@ impl TimeWarpApp {
                 }
             }
             else if cmd_trim.starts_with("M:") {
-                let match_text = &cmd_trim[2..].trim();
+                let match_text = if cmd_trim.len() > 2 { &cmd_trim[2..].trim() } else { "" };
                 output.push(format!("MATCH: {}", match_text));
             }
             else if cmd_trim.starts_with("U:") {
-                let use_text = &cmd_trim[2..].trim();
+                let use_text = if cmd_trim.len() > 2 { &cmd_trim[2..].trim() } else { "" };
                 output.push(format!("USE: {}", use_text));
             }
             else if cmd_trim.starts_with("Y:") {
-                let yes_text = &cmd_trim[2..].trim();
+                let yes_text = if cmd_trim.len() > 2 { &cmd_trim[2..].trim() } else { "" };
                 output.push(format!("YES: {}", yes_text));
             }
             else if cmd_trim.starts_with("N:") {
-                let no_text = &cmd_trim[2..].trim();
+                let no_text = if cmd_trim.len() > 2 { &cmd_trim[2..].trim() } else { "" };
                 output.push(format!("NO: {}", no_text));
             }
 
             // Logo Commands
             else if cmd_upper.starts_with("FORWARD ") || cmd_upper.starts_with("FD ") {
                 let distance = if cmd_upper.starts_with("FORWARD ") {
-                    &command[8..]
+                    if command.len() > 8 { &command[8..] } else { "" }
                 } else {
-                    &command[3..]
+                    if command.len() > 3 { &command[3..] } else { "" }
                 };
                 if let Ok(dist) = distance.trim().parse::<f32>() {
                     self.execute_turtle_command(&format!("FORWARD {}", dist));
@@ -294,9 +304,9 @@ impl TimeWarpApp {
             }
             else if cmd_upper.starts_with("BACKWARD ") || cmd_upper.starts_with("BK ") {
                 let distance = if cmd_upper.starts_with("BACKWARD ") {
-                    &command[9..]
+                    if command.len() > 9 { &command[9..] } else { "" }
                 } else {
-                    &command[3..]
+                    if command.len() > 3 { &command[3..] } else { "" }
                 };
                 if let Ok(dist) = distance.trim().parse::<f32>() {
                     self.execute_turtle_command(&format!("BACKWARD {}", dist));
@@ -305,9 +315,9 @@ impl TimeWarpApp {
             }
             else if cmd_upper.starts_with("RIGHT ") || cmd_upper.starts_with("RT ") {
                 let angle = if cmd_upper.starts_with("RIGHT ") {
-                    &command[6..]
+                    if command.len() > 6 { &command[6..] } else { "" }
                 } else {
-                    &command[3..]
+                    if command.len() > 3 { &command[3..] } else { "" }
                 };
                 if let Ok(ang) = angle.trim().parse::<f32>() {
                     self.execute_turtle_command(&format!("RIGHT {}", ang));
@@ -316,9 +326,9 @@ impl TimeWarpApp {
             }
             else if cmd_upper.starts_with("LEFT ") || cmd_upper.starts_with("LT ") {
                 let angle = if cmd_upper.starts_with("LEFT ") {
-                    &command[5..]
+                    if command.len() > 5 { &command[5..] } else { "" }
                 } else {
-                    &command[3..]
+                    if command.len() > 3 { &command[3..] } else { "" }
                 };
                 if let Ok(ang) = angle.trim().parse::<f32>() {
                     self.execute_turtle_command(&format!("LEFT {}", ang));
@@ -343,15 +353,15 @@ impl TimeWarpApp {
             }
             else if cmd_upper.starts_with("SETPENCOLOR ") || cmd_upper.starts_with("SETPC ") {
                 let color = if cmd_upper.starts_with("SETPENCOLOR ") {
-                    &command[12..]
+                    if command.len() > 12 { &command[12..] } else { "" }
                 } else {
-                    &command[6..]
+                    if command.len() > 6 { &command[6..] } else { "" }
                 };
                 output.push(format!("Pen color set to {}", color));
             }
             else if cmd_upper.starts_with("MAKE ") {
                 // Logo variable assignment
-                let rest = &command[5..];
+                let rest = if command.len() > 5 { &command[5..] } else { "" };
                 if let Some(quote_pos) = rest.find('"') {
                     let var_name = &rest[..quote_pos].trim();
                     if let Some(end_quote) = rest[quote_pos + 1..].find('"') {
@@ -363,11 +373,13 @@ impl TimeWarpApp {
             }
             else if cmd_upper.starts_with("REPEAT ") {
                 // Simple REPEAT implementation
-                if let Some(space_pos) = command[7..].find(' ') {
-                    if let Ok(count) = command[7..7 + space_pos].trim().parse::<u32>() {
-                        let repeat_cmd = &command[7 + space_pos + 1..];
-                        for _ in 0..count {
-                            self.execute_basic_command(&mut output, repeat_cmd.trim());
+                if command.len() > 7 {
+                    if let Some(space_pos) = command[7..].find(' ') {
+                        if let Ok(count) = command[7..7 + space_pos].trim().parse::<u32>() {
+                            let repeat_cmd = if command.len() > 7 + space_pos + 1 { &command[7 + space_pos + 1..] } else { "" };
+                            for _ in 0..count {
+                                self.execute_basic_command(&mut output, repeat_cmd.trim());
+                            }
                         }
                     }
                 }
@@ -529,11 +541,13 @@ impl TimeWarpApp {
                     }
                 } else if line.contains(");") {
                     // Handle variable output
-                    let var_part = &line[8..line.len() - 2]; // Remove "writeln(" and ");"
-                    if let Some(value) = self.variables.get(var_part.trim()) {
-                        output.push(value.clone());
-                    } else {
-                        output.push(format!("Undefined variable: {}", var_part.trim()));
+                    if line.len() > 10 { // "writeln(" + ");" = 10 chars
+                        let var_part = &line[8..line.len() - 2]; // Remove "writeln(" and ");"
+                        if let Some(value) = self.variables.get(var_part.trim()) {
+                            output.push(value.clone());
+                        } else {
+                            output.push(format!("Undefined variable: {}", var_part.trim()));
+                        }
                     }
                 }
             }
@@ -546,13 +560,15 @@ impl TimeWarpApp {
                 }
             }
             else if line_lower.starts_with("readln(") {
-                let var_part = &line[7..line.len() - 1]; // Remove "readln(" and ")"
-                // Set up interactive input for Pascal readln
-                self.input_prompt = format!("Enter value for {}:", var_part.trim());
-                self.current_input_var = var_part.trim().to_string();
-                self.waiting_for_input = true;
-                output.push(format!("{} ", self.input_prompt));
-                // Continue execution - input will be processed later
+                if line.len() > 8 { // "readln(" + ")" = 8 chars
+                    let var_part = &line[7..line.len() - 1]; // Remove "readln(" and ")"
+                    // Set up interactive input for Pascal readln
+                    self.input_prompt = format!("Enter value for {}:", var_part.trim());
+                    self.current_input_var = var_part.trim().to_string();
+                    self.waiting_for_input = true;
+                    output.push(format!("{} ", self.input_prompt));
+                    // Continue execution - input will be processed later
+                }
             }
 
             // Turbo Pascal control structures
@@ -578,36 +594,47 @@ impl TimeWarpApp {
             // Turbo Pascal procedures and functions
             else if line_lower.starts_with("procedure ") {
                 if let Some(paren_pos) = line.find('(') {
-                    let proc_name = &line[10..paren_pos].trim();
-                    output.push(format!("Procedure defined: {}", proc_name));
+                    if line.len() > 10 && paren_pos > 10 {
+                        let proc_name = &line[10..paren_pos].trim();
+                        output.push(format!("Procedure defined: {}", proc_name));
+                    }
                 } else {
-                    let proc_name = &line[10..].trim();
-                    output.push(format!("Procedure defined: {}", proc_name));
+                    if line.len() > 10 {
+                        let proc_name = &line[10..].trim();
+                        output.push(format!("Procedure defined: {}", proc_name));
+                    }
                 }
             }
             else if line_lower.starts_with("function ") {
                 if let Some(paren_pos) = line.find('(') {
-                    let func_name = &line[9..paren_pos].trim();
-                    output.push(format!("Function defined: {}", func_name));
+                    if line.len() > 9 && paren_pos > 9 {
+                        let func_name = &line[9..paren_pos].trim();
+                        output.push(format!("Function defined: {}", func_name));
+                    }
                 }
             }
 
             // Turbo Pascal variable declarations
             else if line_lower.starts_with("var ") {
-                output.push(format!("Variable declaration: {}", &line[4..]));
+                let var_part = if line.len() > 4 { &line[4..] } else { "" };
+                output.push(format!("Variable declaration: {}", var_part));
             }
             else if line_lower.starts_with("const ") {
-                output.push(format!("Constant declaration: {}", &line[6..]));
+                let const_part = if line.len() > 6 { &line[6..] } else { "" };
+                output.push(format!("Constant declaration: {}", const_part));
             }
             else if line_lower.starts_with("type ") {
-                output.push(format!("Type declaration: {}", &line[5..]));
+                let type_part = if line.len() > 5 { &line[5..] } else { "" };
+                output.push(format!("Type declaration: {}", type_part));
             }
 
             // Turbo Pascal program structure
             else if line_lower.starts_with("program ") {
                 if let Some(semi_pos) = line.find(';') {
-                    let prog_name = &line[8..semi_pos].trim();
-                    output.push(format!("Program: {}", prog_name));
+                    if line.len() > 8 && semi_pos > 8 {
+                        let prog_name = &line[8..semi_pos].trim();
+                        output.push(format!("Program: {}", prog_name));
+                    }
                 }
             }
             else if line_lower.starts_with("begin") {
@@ -1171,10 +1198,6 @@ impl eframe::App for TimeWarpApp {
                         self.output.clear();
                         ui.close_menu();
                     }
-                    if ui.button("🐢 Clear Turtle Graphics").clicked() {
-                        self.clear_turtle_graphics();
-                        ui.close_menu();
-                    }
                 });
                 // === RUN MENU ===
                 ui.menu_button("▶️ Run", |ui| {
@@ -1301,11 +1324,8 @@ impl eframe::App for TimeWarpApp {
                     if ui.selectable_label(self.active_tab == 0, "📝 Code Editor").clicked() {
                         self.active_tab = 0;
                     }
-                    if ui.selectable_label(self.active_tab == 1, "� Output").clicked() {
+                    if ui.selectable_label(self.active_tab == 1, "🖥️ Output & Graphics").clicked() {
                         self.active_tab = 1;
-                    }
-                    if ui.selectable_label(self.active_tab == 2, "🐢 Turtle Graphics").clicked() {
-                        self.active_tab = 2;
                     }
                 });
 
@@ -1368,29 +1388,51 @@ impl eframe::App for TimeWarpApp {
                             ui.text_edit_multiline(&mut self.code);
                         }
                     }
-                    1 => { // Output Tab - Interactive Canvas
-                        ui.heading("Interactive Output Console");
+                    1 => { // Output & Graphics Tab - Combined Interactive Canvas
+                        ui.heading("Interactive Output & Graphics Console");
                         ui.add_space(4.0);
 
-                        // Create a canvas for interactive output
-                        let canvas_size = egui::Vec2::new(ui.available_width(), 400.0);
-                        let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click_and_drag());
+                        // Create a single large canvas for both text output and turtle graphics
+                        let canvas_size = egui::Vec2::new(ui.available_width(), 600.0);
+                        let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click_and_drag().union(egui::Sense::focusable_noninteractive()));
 
                         let rect = response.rect;
 
-                        // Draw background
-                        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 30));
-
-                        // Draw border
-                        painter.rect_stroke(rect, 4.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 100, 120)));
-
-                        // Handle canvas interactions
-                        let mut clicked_pos = None;
-                        if response.clicked() {
-                            if let Some(pos) = response.interact_pointer_pos() {
-                                clicked_pos = Some(pos);
-                            }
+                        // Handle focus for input
+                        if self.waiting_for_input {
+                            response.request_focus();
                         }
+
+                        // Split canvas: top half for text output, bottom half for turtle graphics
+                        let text_area_height = 250.0;
+                        let graphics_area_height = rect.height() - text_area_height - 10.0; // 10px gap
+
+                        let text_rect = egui::Rect::from_min_size(
+                            rect.min,
+                            egui::Vec2::new(rect.width(), text_area_height)
+                        );
+
+                        let graphics_rect = egui::Rect::from_min_size(
+                            egui::Pos2::new(rect.min.x, rect.min.y + text_area_height + 10.0),
+                            egui::Vec2::new(rect.width(), graphics_area_height)
+                        );
+
+                        // === TEXT OUTPUT AREA ===
+                        // Draw text area background
+                        let text_bg_color = if response.has_focus() && self.waiting_for_input {
+                            egui::Color32::from_rgb(30, 30, 45)
+                        } else {
+                            egui::Color32::from_rgb(20, 20, 30)
+                        };
+                        painter.rect_filled(text_rect, 4.0, text_bg_color);
+
+                        // Draw text area border
+                        let text_border_color = if response.has_focus() && self.waiting_for_input {
+                            egui::Color32::from_rgb(150, 150, 180)
+                        } else {
+                            egui::Color32::from_rgb(100, 100, 120)
+                        };
+                        painter.rect_stroke(text_rect, 4.0, egui::Stroke::new(2.0, text_border_color));
 
                         // Prepare text layout
                         let font_id = egui::FontId::monospace(14.0);
@@ -1399,115 +1441,116 @@ impl eframe::App for TimeWarpApp {
                         // Split output into lines and handle scrolling
                         let lines: Vec<&str> = self.output.lines().collect();
                         let line_height = 18.0;
-                        let max_visible_lines = ((rect.height() - 20.0) / line_height) as usize;
+                        let max_visible_lines = ((text_rect.height() - 80.0) / line_height) as usize; // Leave space for input area
                         let total_lines = lines.len();
 
-                        // Calculate scroll position
-                        let mut scroll_offset = 0;
+                        // Update scroll position based on content changes
                         if total_lines > max_visible_lines {
-                            scroll_offset = total_lines.saturating_sub(max_visible_lines);
+                            if self.output_scroll >= total_lines.saturating_sub(max_visible_lines) {
+                                self.output_scroll = total_lines.saturating_sub(max_visible_lines);
+                            }
+                        } else {
+                            self.output_scroll = 0;
                         }
 
-                        // Draw visible lines
-                        let mut y_pos = rect.min.y + 10.0;
+                        // Handle scrolling with mouse wheel (only in text area)
+                        let scroll_delta = ui.input(|i| i.scroll_delta.y);
+                        if scroll_delta > 0.0 && self.output_scroll > 0 {
+                            self.output_scroll = self.output_scroll.saturating_sub(1);
+                        } else if scroll_delta < 0.0 && self.output_scroll < total_lines.saturating_sub(max_visible_lines) {
+                            self.output_scroll += 1;
+                        }
+
+                        // Draw visible lines in text area
+                        let mut y_pos = text_rect.min.y + 10.0;
                         for (i, line) in lines.iter().enumerate() {
-                            if i >= scroll_offset && i < scroll_offset + max_visible_lines {
-                                let text_pos = egui::Pos2::new(rect.min.x + 10.0, y_pos);
+                            if i >= self.output_scroll && i < self.output_scroll + max_visible_lines {
+                                let text_pos = egui::Pos2::new(text_rect.min.x + 10.0, y_pos);
                                 painter.text(text_pos, egui::Align2::LEFT_TOP, *line, font_id.clone(), text_color);
                                 y_pos += line_height;
                             }
                         }
 
-                        // Handle input mode
+                        // Handle input mode in text area
                         if self.waiting_for_input {
                             // Draw input prompt and cursor
                             let prompt_text = format!("{} {}", self.input_prompt, self.user_input);
-                            let prompt_pos = egui::Pos2::new(rect.min.x + 10.0, rect.max.y - 30.0);
+                            let prompt_pos = egui::Pos2::new(text_rect.min.x + 10.0, text_rect.max.y - 30.0);
                             painter.text(prompt_pos, egui::Align2::LEFT_TOP, &prompt_text, font_id.clone(), egui::Color32::YELLOW);
 
-                            // Draw cursor
-                            let cursor_x = rect.min.x + 10.0 + painter.layout(prompt_text, font_id.clone(), text_color, f32::INFINITY).size.x;
-                            let cursor_y = rect.max.y - 30.0;
-                            painter.line_segment(
-                                [egui::Pos2::new(cursor_x, cursor_y), egui::Pos2::new(cursor_x, cursor_y + 14.0)],
-                                egui::Stroke::new(2.0, egui::Color32::WHITE),
-                            );
+                            // Draw blinking cursor
+                            let cursor_x = text_rect.min.x + 10.0 + painter.layout(prompt_text, font_id.clone(), text_color, f32::INFINITY).size().x;
+                            let cursor_y = text_rect.max.y - 30.0;
+                            let time = ui.input(|i| i.time);
+                            let cursor_visible = (time * 2.0).sin() > 0.0;
+                            if cursor_visible {
+                                painter.line_segment(
+                                    [egui::Pos2::new(cursor_x, cursor_y), egui::Pos2::new(cursor_x, cursor_y + 14.0)],
+                                    egui::Stroke::new(2.0, egui::Color32::WHITE),
+                                );
+                            }
 
-                            // Handle keyboard input
-                            ui.input(|i| {
-                                for event in &i.events {
-                                    match event {
-                                        egui::Event::Text(text) => {
-                                            self.user_input.push_str(text);
-                                        }
-                                        egui::Event::Key { key, pressed: true, modifiers: _ } => {
-                                            match key {
-                                                egui::Key::Enter => {
-                                                    self.process_user_input();
-                                                }
-                                                egui::Key::Backspace => {
-                                                    self.user_input.pop();
-                                                }
-                                                egui::Key::Escape => {
-                                                    self.waiting_for_input = false;
-                                                    self.input_prompt.clear();
-                                                    self.user_input.clear();
-                                                    self.current_input_var.clear();
-                                                }
-                                                _ => {}
+                            // Handle keyboard input only when canvas has focus
+                            if response.has_focus() {
+                                ui.input(|i| {
+                                    for event in &i.events {
+                                        match event {
+                                            egui::Event::Text(text) => {
+                                                self.user_input.push_str(text);
                                             }
+                                            egui::Event::Key { key, pressed: true, modifiers: _, repeat: _ } => {
+                                                match key {
+                                                    egui::Key::Enter => {
+                                                        self.process_user_input();
+                                                    }
+                                                    egui::Key::Backspace => {
+                                                        self.user_input.pop();
+                                                    }
+                                                    egui::Key::Escape => {
+                                                        self.waiting_for_input = false;
+                                                        self.input_prompt.clear();
+                                                        self.user_input.clear();
+                                                        self.current_input_var.clear();
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            _ => {}
                                         }
-                                        _ => {}
                                     }
-                                }
-                            });
+                                });
+                            }
 
                             // Instructions
-                            let instr_pos = egui::Pos2::new(rect.min.x + 10.0, rect.max.y - 50.0);
-                            painter.text(instr_pos, egui::Align2::LEFT_TOP, "Type your input and press Enter, or Esc to cancel", egui::FontId::default(), egui::Color32::GRAY);
+                            let instr_pos = egui::Pos2::new(text_rect.min.x + 10.0, text_rect.max.y - 50.0);
+                            painter.text(instr_pos, egui::Align2::LEFT_TOP, "Click text area and type your input, press Enter to submit, Esc to cancel", egui::FontId::default(), egui::Color32::GRAY);
                         } else {
                             // Show ready message
-                            let ready_pos = egui::Pos2::new(rect.min.x + 10.0, rect.max.y - 30.0);
-                            painter.text(ready_pos, egui::Align2::LEFT_TOP, "Ready for program execution...", egui::FontId::default(), egui::Color32::GRAY);
+                            let ready_pos = egui::Pos2::new(text_rect.min.x + 10.0, text_rect.max.y - 30.0);
+                            painter.text(ready_pos, egui::Align2::LEFT_TOP, "Ready for program execution... Click text area to focus for input when prompted", egui::FontId::default(), egui::Color32::GRAY);
                         }
 
-                        // Handle scrolling with mouse wheel
-                        if let Some(scroll) = ui.input(|i| i.scroll_delta.y) {
-                            if scroll > 0.0 && scroll_offset > 0 {
-                                // Scroll up
-                            } else if scroll < 0.0 && scroll_offset < total_lines.saturating_sub(max_visible_lines) {
-                                // Scroll down
-                            }
-                        }
-                    }
-                    2 => { // Turtle Graphics Tab
-                        ui.heading("Turtle Graphics");
-                        ui.add_space(4.0);
+                        // === TURTLE GRAPHICS AREA ===
+                        // Draw graphics area background
+                        painter.rect_filled(graphics_rect, 4.0, egui::Color32::WHITE);
 
-                        // Turtle graphics canvas
-                        let canvas_size = egui::Vec2::new(400.0, 400.0);
-                        let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::hover());
-
-                        // Draw turtle graphics
-                        let rect = response.rect;
-
-                        // Draw background
-                        painter.rect_filled(rect, 0.0, egui::Color32::WHITE);
+                        // Draw graphics area border
+                        painter.rect_stroke(graphics_rect, 4.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 100, 120)));
 
                         // Draw grid lines
                         let grid_spacing = 20.0;
-                        let mut x = rect.min.x;
-                        while x <= rect.max.x {
+                        let mut x = graphics_rect.min.x;
+                        while x <= graphics_rect.max.x {
                             painter.line_segment(
-                                [egui::Pos2::new(x, rect.min.y), egui::Pos2::new(x, rect.max.y)],
+                                [egui::Pos2::new(x, graphics_rect.min.y), egui::Pos2::new(x, graphics_rect.max.y)],
                                 egui::Stroke::new(1.0, egui::Color32::LIGHT_GRAY),
                             );
                             x += grid_spacing;
                         }
-                        let mut y = rect.min.y;
-                        while y <= rect.max.y {
+                        let mut y = graphics_rect.min.y;
+                        while y <= graphics_rect.max.y {
                             painter.line_segment(
-                                [egui::Pos2::new(rect.min.x, y), egui::Pos2::new(rect.max.x, y)],
+                                [egui::Pos2::new(graphics_rect.min.x, y), egui::Pos2::new(graphics_rect.max.x, y)],
                                 egui::Stroke::new(1.0, egui::Color32::LIGHT_GRAY),
                             );
                             y += grid_spacing;
@@ -1524,8 +1567,8 @@ impl eframe::App for TimeWarpApp {
                                         parts[3].parse::<f32>(),
                                         parts[4].parse::<f32>(),
                                     ) {
-                                        let start_pos = egui::Pos2::new(rect.min.x + x1, rect.min.y + y1);
-                                        let end_pos = egui::Pos2::new(rect.min.x + x2, rect.min.y + y2);
+                                        let start_pos = egui::Pos2::new(graphics_rect.min.x + x1, graphics_rect.min.y + y1);
+                                        let end_pos = egui::Pos2::new(graphics_rect.min.x + x2, graphics_rect.min.y + y2);
                                         painter.line_segment(
                                             [start_pos, end_pos],
                                             egui::Stroke::new(2.0, self.turtle_state.color),
@@ -1537,8 +1580,8 @@ impl eframe::App for TimeWarpApp {
 
                         // Draw turtle (small triangle)
                         let turtle_size = 8.0;
-                        let turtle_x = rect.min.x + self.turtle_state.x;
-                        let turtle_y = rect.min.y + self.turtle_state.y;
+                        let turtle_x = graphics_rect.min.x + self.turtle_state.x;
+                        let turtle_y = graphics_rect.min.y + self.turtle_state.y;
                         let angle_rad = self.turtle_state.angle.to_radians();
 
                         let points = [
@@ -1561,16 +1604,8 @@ impl eframe::App for TimeWarpApp {
                             egui::Color32::RED,
                             egui::Stroke::new(1.0, egui::Color32::BLACK),
                         ));
-
-                        // Turtle status
-                        ui.separator();
-                        ui.label(format!(
-                            "Turtle at ({:.1}, {:.1}), angle: {:.1}°, pen: {}",
-                            self.turtle_state.x, self.turtle_state.y, self.turtle_state.angle,
-                            if self.turtle_state.pen_down { "down" } else { "up" }
-                        ));
                     }
-                    _ => {}
+                    _ => {} // Handle any other tab indices (shouldn't happen)
                 }
             });
         });
