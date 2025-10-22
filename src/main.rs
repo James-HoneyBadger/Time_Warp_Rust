@@ -37,11 +37,11 @@ struct TimeWarpApp {
 impl Default for TimeWarpApp {
     fn default() -> Self {
         Self {
-            code: String::from("REM TW BASIC Code Here\nPRINT \"Hello, TW BASIC!\"\nLET X = 42\nPRINT X\n\nREM PILOT Commands\nT:What is your name?\nA:NAME\n\nREM Logo Commands\nFORWARD 50\nRIGHT 90\nFORWARD 50"),
+            code: String::new(),
             output: String::from("Welcome to Time Warp IDE!\n"),
             language: String::from("TW BASIC"),
             active_tab: 0, // Start with Editor tab
-            code_history: vec![String::from("REM TW BASIC Code Here\nPRINT \"Hello, TW BASIC!\"\nLET X = 42\nPRINT X\n\nREM PILOT Commands\nT:What is your name?\nA:NAME\n\nREM Logo Commands\nFORWARD 50\nRIGHT 90\nFORWARD 50")],
+            code_history: vec![String::new()],
             code_history_index: 0,
             last_file_path: None,
             variables: HashMap::new(),
@@ -79,7 +79,6 @@ impl TimeWarpApp {
         };
         if self.is_executing && !self.waiting_for_input {  // Only show result if not stopped and not waiting for input
             self.output = format!("[Output for {}]\n{}", self.language, result);
-            self.active_tab = 1; // Switch to Output tab when execution completes
         }
         self.is_executing = false;
     }
@@ -1308,6 +1307,7 @@ impl eframe::App for TimeWarpApp {
                 ui.separator();
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Run ▶").clicked() {
+                        self.active_tab = 1; // Switch to Output tab when running
                         self.execute_code();
                     }
                 });

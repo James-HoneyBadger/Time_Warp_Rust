@@ -1,0 +1,53 @@
+program HelloWorld;
+(* TW Pascal Sample Program *)
+(* Demonstrates input/output, variables, and control structures *)
+
+var
+  name: string;
+  age: integer;
+  choice: char;
+
+begin
+  writeln('Welcome to TW Pascal!');
+  writeln('This program demonstrates Pascal features.');
+  writeln;
+
+  (* Input/Output *)
+  write('What is your name? ');
+  readln(name);
+  writeln('Hello, ', name, '!');
+
+  write('How old are you? ');
+  readln(age);
+  writeln('You are ', age, ' years old.');
+  writeln;
+
+  (* Control structures *)
+  if age < 18 then
+    writeln('You are a minor.')
+  else if age < 65 then
+    writeln('You are an adult.')
+  else
+    writeln('You are a senior citizen.');
+
+  writeln;
+
+  (* Loop example *)
+  writeln('Counting to 5:');
+  for age := 1 to 5 do
+    write(age, ' ');
+  writeln;
+
+  (* Case statement *)
+  writeln('Choose a letter (A, B, or C):');
+  readln(choice);
+  case choice of
+    'A': writeln('You chose A - Excellent!');
+    'B': writeln('You chose B - Good choice!');
+    'C': writeln('You chose C - Not bad!');
+  else
+    writeln('Invalid choice.');
+  end;
+
+  writeln('Program complete!');
+end.

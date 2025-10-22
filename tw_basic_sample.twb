@@ -1,0 +1,52 @@
+REM TW BASIC Sample Program - Combined Features
+REM Demonstrates GW BASIC, PILOT, and Logo integration
+
+PRINT "Welcome to TW BASIC!"
+PRINT "This program combines GW BASIC, PILOT, and Logo features."
+PRINT
+
+REM GW BASIC: Variables and arithmetic
+LET X = 10
+LET Y = 20
+LET SUM = X + Y
+PRINT "GW BASIC: X + Y = "; SUM
+PRINT
+
+REM PILOT: Interactive questions
+T:What is your name?
+A:NAME
+PRINT "Hello, "; NAME; "!"
+PRINT
+
+REM PILOT: Multiple choice
+T:What is your favorite color?
+A:COLOR
+M:RED
+U:Great choice!
+M:BLUE
+U:Nice!
+M:GREEN
+U:Cool!
+Y:That's a good color!
+N:Interesting choice!
+PRINT
+
+REM Logo: Turtle graphics
+PRINT "Now let's draw with Logo turtle graphics!"
+FORWARD 50
+RIGHT 90
+FORWARD 50
+RIGHT 90
+FORWARD 50
+RIGHT 90
+FORWARD 50
+RIGHT 90
+
+REM More complex drawing
+PENUP
+HOME
+PENDOWN
+REPEAT 8 [FORWARD 30 RIGHT 45]
+
+PRINT "Drawing complete!"
+PRINT "Check the graphics area above."

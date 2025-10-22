@@ -1,0 +1,89 @@
+program MathDemo;
+(* TW Pascal Advanced Sample *)
+(* Demonstrates procedures, functions, and arrays *)
+
+var
+  numbers: array[1..5] of integer;
+  i, sum, max_val: integer;
+  average: real;
+
+(* Function to calculate factorial *)
+function factorial(n: integer): integer;
+var
+  result, i: integer;
+begin
+  result := 1;
+  for i := 1 to n do
+    result := result * i;
+  factorial := result;
+end;
+
+(* Procedure to find maximum in array *)
+procedure find_max(arr: array[1..5] of integer; var max_val: integer);
+var
+  i: integer;
+begin
+  max_val := arr[1];
+  for i := 2 to 5 do
+    if arr[i] > max_val then
+      max_val := arr[i];
+end;
+
+(* Procedure to calculate sum *)
+procedure calculate_sum(arr: array[1..5] of integer; var total: integer);
+var
+  i: integer;
+begin
+  total := 0;
+  for i := 1 to 5 do
+    total := total + arr[i];
+end;
+
+begin
+  writeln('TW Pascal Advanced Demo');
+  writeln('=======================');
+  writeln;
+
+  (* Initialize array *)
+  numbers[1] := 3;
+  numbers[2] := 7;
+  numbers[3] := 2;
+  numbers[4] := 9;
+  numbers[5] := 5;
+
+  (* Display array *)
+  writeln('Numbers in array:');
+  for i := 1 to 5 do
+    write(numbers[i], ' ');
+  writeln;
+  writeln;
+
+  (* Use procedures *)
+  calculate_sum(numbers, sum);
+  find_max(numbers, max_val);
+
+  writeln('Sum of numbers: ', sum);
+  writeln('Maximum value: ', max_val);
+
+  (* Calculate average *)
+  average := sum / 5.0;
+  writeln('Average: ', average:0:2);
+
+  (* Use function *)
+  writeln;
+  writeln('Factorial examples:');
+  for i := 1 to 5 do
+    writeln(i, '! = ', factorial(i));
+
+  (* Interactive part *)
+  writeln;
+  write('Enter a number to calculate its factorial: ');
+  readln(i);
+  if i >= 0 then
+    writeln(i, '! = ', factorial(i))
+  else
+    writeln('Factorial not defined for negative numbers.');
+
+  writeln;
+  writeln('Program complete!');
+end.

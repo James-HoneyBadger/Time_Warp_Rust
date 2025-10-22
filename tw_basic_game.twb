@@ -1,0 +1,38 @@
+10 REM TW BASIC Advanced Sample - Line Numbered Program
+20 REM Demonstrates traditional BASIC programming style
+30 REM
+40 PRINT "TW BASIC Line-Numbered Program"
+50 PRINT "================================"
+60 PRINT
+70 LET SCORE = 0
+80 LET TRIES = 0
+90
+100 PRINT "Welcome to the Number Guessing Game!"
+110 PRINT "I'm thinking of a number between 1 and 10."
+120 PRINT
+130 LET SECRET = 7  REM In a real game, this would be random
+140
+150 REM Main game loop
+160 PRINT "Guess the number (1-10): "
+170 INPUT GUESS
+180 LET TRIES = TRIES + 1
+190
+200 IF GUESS = SECRET THEN GOTO 300
+210 IF GUESS < SECRET THEN PRINT "Too low! Try again."
+220 IF GUESS > SECRET THEN PRINT "Too high! Try again."
+230 PRINT
+240 GOTO 150
+250
+300 REM Win condition
+310 PRINT
+320 PRINT "Congratulations! You guessed it!"
+330 PRINT "The number was"; SECRET
+340 PRINT "It took you"; TRIES; "tries."
+350
+360 IF TRIES = 1 THEN PRINT "Amazing! First try!"
+370 IF TRIES <= 3 THEN PRINT "Great job!"
+380 IF TRIES > 3 THEN PRINT "Not bad!"
+390
+400 PRINT
+410 PRINT "Thanks for playing!"
+420 END

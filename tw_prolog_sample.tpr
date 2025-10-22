@@ -1,0 +1,62 @@
+% TW Prolog Sample Program
+% Demonstrates facts, rules, and queries
+
+% Domains (type declarations)
+domains
+  name = string
+  age = integer
+  color = string
+
+% Predicates (declarations)
+predicates
+  person(name, age)
+  likes(name, color)
+  adult(name)
+  child(name)
+  favorite_color(name, color)
+
+% Clauses (facts and rules)
+clauses
+
+  % Facts about people
+  person("Alice", 25).
+  person("Bob", 12).
+  person("Charlie", 35).
+  person("Diana", 8).
+
+  % Facts about color preferences
+  likes("Alice", "blue").
+  likes("Bob", "red").
+  likes("Charlie", "green").
+  likes("Diana", "yellow").
+
+  % Rules
+  adult(Name) :- person(Name, Age), Age >= 18.
+  child(Name) :- person(Name, Age), Age < 18.
+  favorite_color(Name, Color) :- likes(Name, Color).
+
+% Goal section (queries to execute)
+goal
+
+  % Query 1: List all adults
+  write("Adults in the database:"), nl,
+  adult(Person), write("  ", Person), nl,
+  fail.
+
+  % Query 2: List all children
+  nl, write("Children in the database:"), nl,
+  child(Person), write("  ", Person), nl,
+  fail.
+
+  % Query 3: Find Alice's favorite color
+  nl, write("Alice's favorite color: "),
+  favorite_color("Alice", Color), write(Color), nl.
+
+  % Query 4: Who likes red?
+  nl, write("Who likes red? "),
+  likes(Person, "red"), write(Person), nl.
+
+  % Query 5: List all people and their ages
+  nl, write("All people and ages:"), nl,
+  person(Name, Age), write("  ", Name, " is ", Age, " years old"), nl,
+  fail.
